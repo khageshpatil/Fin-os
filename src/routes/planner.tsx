@@ -2,12 +2,7 @@ import { createFileRoute } from "@tanstack/react-router";
 import { useMemo, useState } from "react";
 import { PageShell } from "@/components/page-shell";
 import { useProfile } from "@/lib/profile-store";
-import {
-  disciplineScore,
-  evaluateRules,
-  inr,
-  type FinancialProfile,
-} from "@/lib/financial";
+import { disciplineScore, evaluateRules, inr, type FinancialProfile } from "@/lib/financial";
 import { TrendingUp, ShoppingBag, ArrowUpRight, Banknote, Sparkles } from "lucide-react";
 
 export const Route = createFileRoute("/planner")({
@@ -23,10 +18,30 @@ export const Route = createFileRoute("/planner")({
 type Scenario = "salary" | "purchase" | "sip" | "loan";
 
 const scenarios: { id: Scenario; title: string; icon: typeof TrendingUp; description: string }[] = [
-  { id: "salary", title: "Salary Increase", icon: TrendingUp, description: "Model a raise and how to allocate it." },
-  { id: "sip", title: "Investment Increase", icon: Sparkles, description: "Step up your SIP and see score lift." },
-  { id: "purchase", title: "Major Purchase", icon: ShoppingBag, description: "Test impact of a big-ticket buy." },
-  { id: "loan", title: "Take a Loan", icon: Banknote, description: "Add an EMI and see DTI shift." },
+  {
+    id: "salary",
+    title: "Salary Increase",
+    icon: TrendingUp,
+    description: "Model a raise and how to allocate it.",
+  },
+  {
+    id: "sip",
+    title: "Investment Increase",
+    icon: Sparkles,
+    description: "Step up your SIP and see score lift.",
+  },
+  {
+    id: "purchase",
+    title: "Major Purchase",
+    icon: ShoppingBag,
+    description: "Test impact of a big-ticket buy.",
+  },
+  {
+    id: "loan",
+    title: "Take a Loan",
+    icon: Banknote,
+    description: "Add an EMI and see DTI shift.",
+  },
 ];
 
 function PlannerPage() {
@@ -35,6 +50,7 @@ function PlannerPage() {
   const [active, setActive] = useState<Scenario>("salary");
 
   const [newSalary, setNewSalary] = useState(120000);
+  const [raiseToSipPct, setRaiseToSipPct] = useState(50);
   const [extraSIP, setExtraSIP] = useState(7000);
   const [purchaseAmt, setPurchaseAmt] = useState(200000);
   const [loanEMI, setLoanEMI] = useState(15000);
@@ -44,7 +60,11 @@ function PlannerPage() {
 
   const projectedProfile: FinancialProfile = useMemo(() => {
     const next = { ...profile };
-    if (active === "salary") next.monthlyIncome = newSalary;
+    if (active === "salary") {
+      const raise = Math.max(0, newSalary - profile.monthlyIncome);
+      next.monthlyIncome = newSalary;
+      next.monthlySIP = profile.monthlySIP + (raise * raiseToSipPct) / 100;
+    }
     if (active === "sip") next.monthlySIP = profile.monthlySIP + extraSIP;
     if (active === "purchase") {
       next.emergencyFund = Math.max(0, profile.emergencyFund - purchaseAmt);
@@ -54,7 +74,7 @@ function PlannerPage() {
       next.monthlyExpenses = profile.monthlyExpenses + loanEMI;
     }
     return next;
-  }, [active, profile, newSalary, extraSIP, purchaseAmt, loanEMI]);
+  }, [active, profile, newSalary, raiseToSipPct, extraSIP, purchaseAmt, loanEMI]);
 
   const projRules = useMemo(() => evaluateRules(projectedProfile), [projectedProfile]);
   const projScore = useMemo(() => disciplineScore(projRules), [projRules]);
@@ -66,7 +86,7 @@ function PlannerPage() {
         .map((b, i) => ({ name: b.name, delta: projRules[i].points - b.points }))
         .filter((x) => x.delta !== 0)
         .sort((a, b) => Math.abs(b.delta) - Math.abs(a.delta)),
-    [baseRules, projRules]
+    [baseRules, projRules],
   );
 
   if (!setupReady) {
@@ -97,12 +117,20 @@ function PlannerPage() {
               key={s.id}
               onClick={() => setActive(s.id)}
               className={`group relative overflow-hidden rounded-xl border p-5 text-left transition-all ${
-                isActive ? "border-foreground/40 bg-card" : "border-border bg-card/60 hover:border-foreground/20"
+                isActive
+                  ? "border-foreground/40 bg-card"
+                  : "border-border bg-card/60 hover:border-foreground/20"
               }`}
             >
               <div className="flex items-center justify-between">
-                <s.icon className={`h-4 w-4 ${isActive ? "text-foreground" : "text-muted-foreground"}`} />
-                {isActive && <span className="text-[10px] font-medium uppercase tracking-wider text-success">Active</span>}
+                <s.icon
+                  className={`h-4 w-4 ${isActive ? "text-foreground" : "text-muted-foreground"}`}
+                />
+                {isActive && (
+                  <span className="text-[10px] font-medium uppercase tracking-wider text-success">
+                    Active
+                  </span>
+                )}
               </div>
               <div className="mt-4 text-sm font-semibold tracking-tight">{s.title}</div>
               <div className="mt-1 text-xs text-muted-foreground">{s.description}</div>
@@ -114,32 +142,83 @@ function PlannerPage() {
       <div className="mt-6 grid gap-4 lg:grid-cols-2">
         {/* Inputs */}
         <div className="rounded-xl border border-border bg-card p-6">
-          <div className="text-[11px] font-medium uppercase tracking-[0.18em] text-muted-foreground">Inputs</div>
-          <h3 className="mt-1 text-lg font-semibold tracking-tight">{scenarios.find((s) => s.id === active)!.title}</h3>
+          <div className="text-[11px] font-medium uppercase tracking-[0.18em] text-muted-foreground">
+            Inputs
+          </div>
+          <h3 className="mt-1 text-lg font-semibold tracking-tight">
+            {scenarios.find((s) => s.id === active)!.title}
+          </h3>
 
           <div className="mt-6 space-y-5">
             {active === "salary" && (
               <>
                 <ReadOnly label="Current Salary" value={inr(profile.monthlyIncome)} />
-                <Range label="New Salary" min={profile.monthlyIncome} max={profile.monthlyIncome * 3} step={1000} value={newSalary} onChange={setNewSalary} format={inr} />
+                <Range
+                  label="New Salary"
+                  min={profile.monthlyIncome}
+                  max={profile.monthlyIncome * 3}
+                  step={1000}
+                  value={newSalary}
+                  onChange={setNewSalary}
+                  format={inr}
+                />
+                <Range
+                  label="Raise to SIP"
+                  min={0}
+                  max={100}
+                  step={5}
+                  value={raiseToSipPct}
+                  onChange={setRaiseToSipPct}
+                  format={(value) => `${value}%`}
+                />
+                <ReadOnly
+                  label="Projected SIP Increase"
+                  value={inr(
+                    (Math.max(0, newSalary - profile.monthlyIncome) * raiseToSipPct) / 100,
+                  )}
+                />
               </>
             )}
             {active === "sip" && (
               <>
                 <ReadOnly label="Current SIP" value={inr(profile.monthlySIP)} />
-                <Range label="Additional SIP / month" min={0} max={profile.monthlyIncome} step={500} value={extraSIP} onChange={setExtraSIP} format={inr} />
+                <Range
+                  label="Additional SIP / month"
+                  min={0}
+                  max={profile.monthlyIncome}
+                  step={500}
+                  value={extraSIP}
+                  onChange={setExtraSIP}
+                  format={inr}
+                />
               </>
             )}
             {active === "purchase" && (
               <>
                 <ReadOnly label="Emergency Fund" value={inr(profile.emergencyFund)} />
-                <Range label="Purchase Amount" min={10000} max={Math.max(500000, profile.emergencyFund * 2)} step={5000} value={purchaseAmt} onChange={setPurchaseAmt} format={inr} />
+                <Range
+                  label="Purchase Amount"
+                  min={10000}
+                  max={Math.max(500000, profile.emergencyFund * 2)}
+                  step={5000}
+                  value={purchaseAmt}
+                  onChange={setPurchaseAmt}
+                  format={inr}
+                />
               </>
             )}
             {active === "loan" && (
               <>
                 <ReadOnly label="Current EMIs" value={inr(profile.loans)} />
-                <Range label="New EMI / month" min={1000} max={profile.monthlyIncome} step={500} value={loanEMI} onChange={setLoanEMI} format={inr} />
+                <Range
+                  label="New EMI / month"
+                  min={1000}
+                  max={profile.monthlyIncome}
+                  step={500}
+                  value={loanEMI}
+                  onChange={setLoanEMI}
+                  format={inr}
+                />
               </>
             )}
           </div>
@@ -147,7 +226,9 @@ function PlannerPage() {
 
         {/* Results */}
         <div className="rounded-xl border border-border bg-card p-6">
-          <div className="text-[11px] font-medium uppercase tracking-[0.18em] text-muted-foreground">Results</div>
+          <div className="text-[11px] font-medium uppercase tracking-[0.18em] text-muted-foreground">
+            Results
+          </div>
           <h3 className="mt-1 text-lg font-semibold tracking-tight">Projected impact</h3>
 
           <div className="mt-6 grid grid-cols-3 gap-3">
@@ -157,11 +238,18 @@ function PlannerPage() {
           </div>
 
           <div className="mt-6">
-            <div className="text-[10px] uppercase tracking-wider text-muted-foreground">Affected Rules</div>
+            <div className="text-[10px] uppercase tracking-wider text-muted-foreground">
+              Affected Rules
+            </div>
             <div className="mt-2 space-y-2">
-              {affected.length === 0 && <div className="text-xs text-muted-foreground">No rules affected.</div>}
+              {affected.length === 0 && (
+                <div className="text-xs text-muted-foreground">No rules affected.</div>
+              )}
               {affected.slice(0, 5).map((a) => (
-                <div key={a.name} className="flex items-center justify-between rounded-md border border-border/60 bg-background/40 px-3 py-2 text-sm">
+                <div
+                  key={a.name}
+                  className="flex items-center justify-between rounded-md border border-border/60 bg-background/40 px-3 py-2 text-sm"
+                >
                   <span>{a.name}</span>
                   <span className={a.delta > 0 ? "text-success" : "text-destructive"}>
                     {a.delta > 0 ? "+" : ""}
@@ -177,7 +265,17 @@ function PlannerPage() {
               <ArrowUpRight className="h-3.5 w-3.5" />
               Recommendation
             </div>
-            <p className="mt-2 text-sm leading-relaxed">{recommendationFor(active, { newSalary, extraSIP, purchaseAmt, loanEMI, profile, diff })}</p>
+            <p className="mt-2 text-sm leading-relaxed">
+              {recommendationFor(active, {
+                newSalary,
+                raiseToSipPct,
+                extraSIP,
+                purchaseAmt,
+                loanEMI,
+                profile,
+                diff,
+              })}
+            </p>
           </div>
         </div>
       </div>
@@ -187,12 +285,22 @@ function PlannerPage() {
 
 function recommendationFor(
   active: Scenario,
-  c: { newSalary: number; extraSIP: number; purchaseAmt: number; loanEMI: number; profile: FinancialProfile; diff: number }
+  c: {
+    newSalary: number;
+    raiseToSipPct: number;
+    extraSIP: number;
+    purchaseAmt: number;
+    loanEMI: number;
+    profile: FinancialProfile;
+    diff: number;
+  },
 ) {
   if (active === "salary") {
     const inc = c.newSalary - c.profile.monthlyIncome;
-    const suggest = Math.round(inc * 0.5);
-    return `Channel ~${inr(suggest)} (50% of the raise) into SIP to lift your investment rate and score.`;
+    const allocated = Math.round((Math.max(0, inc) * c.raiseToSipPct) / 100);
+    return inc > 0
+      ? `This scenario sends ${inr(allocated)} (${c.raiseToSipPct}% of the raise) into SIP each month. Adjust the split until the score lift feels worth it.`
+      : "Increase the projected salary first to see how a raise changes your allocation options.";
   }
   if (active === "sip") {
     return c.diff > 0
@@ -258,13 +366,33 @@ function Range({
   );
 }
 
-function ScoreCell({ label, value, highlight, delta }: { label: string; value: number; highlight?: boolean; delta?: boolean }) {
+function ScoreCell({
+  label,
+  value,
+  highlight,
+  delta,
+}: {
+  label: string;
+  value: number;
+  highlight?: boolean;
+  delta?: boolean;
+}) {
   const display = delta ? `${value > 0 ? "+" : ""}${value}` : value;
-  const color = delta ? (value > 0 ? "text-success" : value < 0 ? "text-destructive" : "text-muted-foreground") : "";
+  const color = delta
+    ? value > 0
+      ? "text-success"
+      : value < 0
+        ? "text-destructive"
+        : "text-muted-foreground"
+    : "";
   return (
-    <div className={`rounded-md border p-4 ${highlight ? "border-foreground/30 bg-background/60" : "border-border/60 bg-background/40"}`}>
+    <div
+      className={`rounded-md border p-4 ${highlight ? "border-foreground/30 bg-background/60" : "border-border/60 bg-background/40"}`}
+    >
       <div className="text-[10px] uppercase tracking-wider text-muted-foreground">{label}</div>
-      <div className={`mt-1 text-3xl font-semibold tracking-tight tabular-nums ${color}`}>{display}</div>
+      <div className={`mt-1 text-3xl font-semibold tracking-tight tabular-nums ${color}`}>
+        {display}
+      </div>
     </div>
   );
 }

@@ -31,8 +31,8 @@ export function createBlankProfile(): FinancialProfile {
   return {
     monthlyIncome: 0,
     monthlyExpenses: 0,
-    monthlyNeeds: 0,
-    monthlyWants: 0,
+    monthlyNeeds: undefined,
+    monthlyWants: undefined,
     emergencyFund: 0,
     mutualFunds: 0,
     stocks: 0,
@@ -94,8 +94,16 @@ export interface RuleResult {
   gap: string;
   points: number;
   maxPoints: number;
+  progressPct: number;
   status: RuleStatus;
   action: string;
+}
+
+function withProgress(rule: Omit<RuleResult, "progressPct">): RuleResult {
+  return {
+    ...rule,
+    progressPct: rule.maxPoints > 0 ? (rule.points / rule.maxPoints) * 100 : 0,
+  };
 }
 
 export function inr(n: number) {
@@ -113,6 +121,14 @@ export function netWorth(p: FinancialProfile) {
   return totalInvestments(p) + p.emergencyFund;
 }
 
+export function hasBudgetCategories(p: FinancialProfile) {
+  return (
+    p.monthlyNeeds !== undefined &&
+    p.monthlyWants !== undefined &&
+    (p.monthlyNeeds > 0 || p.monthlyWants > 0 || p.monthlyExpenses === 0)
+  );
+}
+
 export function evaluateRules(p: FinancialProfile): RuleResult[] {
   const annualIncome = p.monthlyIncome * 12;
 
@@ -122,7 +138,7 @@ export function evaluateRules(p: FinancialProfile): RuleResult[] {
   if (efMonths >= 6) efPoints = 20;
   else if (efMonths >= 4) efPoints = 15;
   else if (efMonths >= 2) efPoints = 10;
-  const r1: RuleResult = {
+  const r1 = withProgress({
     id: "emergency-fund",
     name: "Emergency Fund",
     description: "Maintain at least 6 months of expenses as emergency savings.",
@@ -133,18 +149,19 @@ export function evaluateRules(p: FinancialProfile): RuleResult[] {
     gap: efMonths >= 6 ? "On Track" : `${(6 - efMonths).toFixed(1)} months short`,
     points: efPoints,
     maxPoints: 20,
-    status: efMonths >= 6 ? "excellent" : efMonths >= 4 ? "good" : efMonths >= 2 ? "warning" : "critical",
+    status:
+      efMonths >= 6 ? "excellent" : efMonths >= 4 ? "good" : efMonths >= 2 ? "warning" : "critical",
     action:
       efMonths >= 6
         ? "Maintain your buffer in a liquid fund."
         : `Add ${inr((6 - efMonths) * p.monthlyExpenses)} to your emergency fund.`,
-  };
+  });
 
   // 2. Health Insurance — 10L+ (tiered: <5L=0, 5L-10L=5, 10L+=10)
   let hiPoints = 0;
   if (p.healthInsurance >= 1000000) hiPoints = 10;
   else if (p.healthInsurance >= 500000) hiPoints = 5;
-  const r2: RuleResult = {
+  const r2 = withProgress({
     id: "health-insurance",
     name: "Health Insurance",
     description: "Hold a health cover of at least ₹10 Lakhs.",
@@ -155,12 +172,17 @@ export function evaluateRules(p: FinancialProfile): RuleResult[] {
     gap: p.healthInsurance >= 1000000 ? "Covered" : `${inr(1000000 - p.healthInsurance)} short`,
     points: hiPoints,
     maxPoints: 10,
-    status: p.healthInsurance >= 1000000 ? "excellent" : p.healthInsurance >= 500000 ? "warning" : "critical",
+    status:
+      p.healthInsurance >= 1000000
+        ? "excellent"
+        : p.healthInsurance >= 500000
+          ? "warning"
+          : "critical",
     action:
       p.healthInsurance >= 1000000
         ? "Review cover every 2 years for inflation."
         : "Top-up to a ₹10L family floater plan.",
-  };
+  });
 
   // 3. Term Insurance — 10x annual income (tiered: <5x=0, 5x-10x=5, 10x+=10)
   const termTarget = annualIncome * 10;
@@ -168,7 +190,7 @@ export function evaluateRules(p: FinancialProfile): RuleResult[] {
   let tiPoints = 0;
   if (termRatio >= 10) tiPoints = 10;
   else if (termRatio >= 5) tiPoints = 5;
-  const r3: RuleResult = {
+  const r3 = withProgress({
     id: "term-insurance",
     name: "Term Insurance",
     description: "Carry pure term cover of at least 10x your annual income.",
@@ -179,19 +201,24 @@ export function evaluateRules(p: FinancialProfile): RuleResult[] {
     gap: p.termInsurance >= termTarget ? "Adequate" : `${inr(termTarget - p.termInsurance)} short`,
     points: tiPoints,
     maxPoints: 10,
-    status: p.termInsurance >= termTarget ? "excellent" : p.termInsurance >= termTarget * 0.5 ? "warning" : "critical",
+    status:
+      p.termInsurance >= termTarget
+        ? "excellent"
+        : p.termInsurance >= termTarget * 0.5
+          ? "warning"
+          : "critical",
     action:
       p.termInsurance >= termTarget
         ? "Cover is on track."
         : `Buy additional term cover of ${inr(termTarget - p.termInsurance)}.`,
-  };
+  });
 
   // 4. Investment Rate — 20%+ of income (tiered: <10%=0, 10-20%=10, 20%+=15)
   const investRate = p.monthlyIncome > 0 ? (p.monthlySIP / p.monthlyIncome) * 100 : 0;
   let irPoints = 0;
   if (investRate >= 20) irPoints = 15;
   else if (investRate >= 10) irPoints = 10;
-  const r4: RuleResult = {
+  const r4 = withProgress({
     id: "investment-rate",
     name: "Investment Rate",
     description: "Invest at least 20% of your monthly income.",
@@ -202,12 +229,19 @@ export function evaluateRules(p: FinancialProfile): RuleResult[] {
     gap: investRate >= 20 ? "On Track" : `${(20 - investRate).toFixed(1)}% gap`,
     points: irPoints,
     maxPoints: 15,
-    status: investRate >= 20 ? "excellent" : investRate >= 10 ? "good" : investRate >= 5 ? "warning" : "critical",
+    status:
+      investRate >= 20
+        ? "excellent"
+        : investRate >= 10
+          ? "good"
+          : investRate >= 5
+            ? "warning"
+            : "critical",
     action:
       investRate >= 20
         ? "Keep increasing SIP with each raise."
-        : `Increase SIP by ${inr((20 - investRate) / 100 * p.monthlyIncome)} / month.`,
-  };
+        : `Increase SIP by ${inr(((20 - investRate) / 100) * p.monthlyIncome)} / month.`,
+  });
 
   // 5. SIP Growth — increase every year (tiered: 0=0, 1-5%=5, 5-10%=8, 10%+=10)
   const sipGrowth = p.sipLastYear > 0 ? ((p.monthlySIP - p.sipLastYear) / p.sipLastYear) * 100 : 0;
@@ -215,7 +249,7 @@ export function evaluateRules(p: FinancialProfile): RuleResult[] {
   if (sipGrowth >= 10) sgPoints = 10;
   else if (sipGrowth >= 5) sgPoints = 8;
   else if (sipGrowth > 0) sgPoints = 5;
-  const r5: RuleResult = {
+  const r5 = withProgress({
     id: "sip-growth",
     name: "SIP Growth",
     description: "Step-up your SIP contribution every year.",
@@ -226,12 +260,20 @@ export function evaluateRules(p: FinancialProfile): RuleResult[] {
     gap: sipGrowth >= 10 ? "Growing" : "Below target",
     points: sgPoints,
     maxPoints: 10,
-    status: sipGrowth >= 10 ? "excellent" : sipGrowth >= 5 ? "good" : sipGrowth > 0 ? "warning" : "critical",
-    action: sipGrowth >= 10 ? "Maintain the step-up cadence." : "Step-up SIP by at least 10% this year.",
-  };
+    status:
+      sipGrowth >= 10
+        ? "excellent"
+        : sipGrowth >= 5
+          ? "good"
+          : sipGrowth > 0
+            ? "warning"
+            : "critical",
+    action:
+      sipGrowth >= 10 ? "Maintain the step-up cadence." : "Step-up SIP by at least 10% this year.",
+  });
 
   // 6. Three-Account System (tiered: Not=0, Partial=5, Fully=10)
-  const r6: RuleResult = {
+  const r6 = withProgress({
     id: "three-account",
     name: "Three Account System",
     description: "Separate Spending, Savings and Investment accounts.",
@@ -243,8 +285,10 @@ export function evaluateRules(p: FinancialProfile): RuleResult[] {
     points: p.threeAccountSystem ? 10 : 0,
     maxPoints: 10,
     status: p.threeAccountSystem ? "excellent" : "critical",
-    action: p.threeAccountSystem ? "Automate monthly sweeps." : "Open dedicated Savings & Investment accounts.",
-  };
+    action: p.threeAccountSystem
+      ? "Automate monthly sweeps."
+      : "Open dedicated Savings & Investment accounts.",
+  });
 
   // 7. 50-30-20 — needs/wants/savings ratio (tiered: Poor=0, Close=5, Compliant=10)
   // If category data is available, use it; otherwise fall back to total expenses
@@ -253,7 +297,7 @@ export function evaluateRules(p: FinancialProfile): RuleResult[] {
   let savingsPct: number;
   let categoryTracked = false;
 
-  if (p.monthlyNeeds !== undefined && p.monthlyWants !== undefined && p.monthlyNeeds > 0) {
+  if (hasBudgetCategories(p)) {
     // Category-based calculation (more accurate)
     needsPct = (p.monthlyNeeds / p.monthlyIncome) * 100;
     wantsPct = (p.monthlyWants / p.monthlyIncome) * 100;
@@ -272,33 +316,37 @@ export function evaluateRules(p: FinancialProfile): RuleResult[] {
   if (compliant) r7Points = 10;
   else if (close) r7Points = 5;
 
-  const r7: RuleResult = {
+  const r7 = withProgress({
     id: "50-30-20",
     name: "50-30-20 Rule",
     description: "Spend ≤50% on needs, ≤30% on wants, save ≥20%.",
-    current: categoryTracked 
+    current: categoryTracked
       ? `Needs ${needsPct.toFixed(0)}% | Wants ${wantsPct.toFixed(0)}% | Save ${savingsPct.toFixed(0)}%`
       : `Expenses ${needsPct.toFixed(0)}% / Save ${savingsPct.toFixed(0)}%`,
     target: "Needs ≤50% / Wants ≤30% / Save ≥20%",
     currentNum: savingsPct,
     targetNum: 20,
-    gap: compliant ? "Compliant" : categoryTracked ? "Shift spending away from wants" : "Track your needs vs wants",
+    gap: compliant
+      ? "Compliant"
+      : categoryTracked
+        ? "Shift spending away from wants"
+        : "Track your needs vs wants",
     points: r7Points,
     maxPoints: 10,
     status: compliant ? "excellent" : close ? "good" : "warning",
-    action: compliant 
-      ? "Keep your ratios steady." 
+    action: compliant
+      ? "Keep your ratios steady."
       : categoryTracked
-      ? "Reduce wants or increase income to hit 20%+ savings rate."
-      : "Add needs vs wants breakdown in settings to get personalized advice.",
-  };
+        ? "Reduce wants or increase income to hit 20%+ savings rate."
+        : "Add needs vs wants breakdown in settings to get personalized advice.",
+  });
 
   // 8. Credit Utilization — below 30% (tiered: >50%=0, 30-50%=5, <30%=10)
   const utilization = p.creditLimit > 0 ? (p.creditUsage / p.creditLimit) * 100 : 0;
   let cuPoints = 0;
   if (utilization < 30) cuPoints = 10;
   else if (utilization <= 50) cuPoints = 5;
-  const r8: RuleResult = {
+  const r8 = withProgress({
     id: "credit-utilization",
     name: "Credit Utilization",
     description: "Keep credit utilization below 30% of total limit.",
@@ -310,8 +358,11 @@ export function evaluateRules(p: FinancialProfile): RuleResult[] {
     points: cuPoints,
     maxPoints: 10,
     status: utilization < 30 ? "excellent" : utilization <= 50 ? "warning" : "critical",
-    action: utilization < 30 ? "Pay statements in full each month." : "Lower outstanding balance or request a limit increase.",
-  };
+    action:
+      utilization < 30
+        ? "Pay statements in full each month."
+        : "Lower outstanding balance or request a limit increase.",
+  });
 
   // 9. Gold Allocation — 5-15% of investments (tiered: <5%=0, 5-15%=5, >15%=3)
   const inv = totalInvestments(p);
@@ -320,7 +371,7 @@ export function evaluateRules(p: FinancialProfile): RuleResult[] {
   let gaPoints = 0;
   if (goldPct >= 5 && goldPct <= 15) gaPoints = 5;
   else if (goldPct > 15) gaPoints = 3;
-  const r9: RuleResult = {
+  const r9 = withProgress({
     id: "gold-allocation",
     name: "Gold Allocation",
     description: "Hold 5-15% of investments in gold for stability.",
@@ -337,7 +388,7 @@ export function evaluateRules(p: FinancialProfile): RuleResult[] {
       : goldPct < 5
         ? "Increase gold via Sovereign Gold Bonds."
         : "Trim gold exposure into equity.",
-  };
+  });
 
   return [r1, r2, r3, r4, r5, r6, r7, r8, r9];
 }
@@ -373,7 +424,11 @@ export function topActions(rules: RuleResult[]): ActionItem[] {
       title: r.action,
       rule: r.name,
       impact: r.maxPoints - r.points,
-      priority: (r.maxPoints - r.points >= 8 ? "High" : r.maxPoints - r.points >= 4 ? "Medium" : "Low") as ActionItem["priority"],
+      priority: (r.maxPoints - r.points >= 8
+        ? "High"
+        : r.maxPoints - r.points >= 4
+          ? "Medium"
+          : "Low") as ActionItem["priority"],
     }))
     .filter((a) => a.impact > 0)
     .sort((a, b) => b.impact - a.impact)
@@ -383,12 +438,27 @@ export function topActions(rules: RuleResult[]): ActionItem[] {
 export function statusTone(s: RuleStatus) {
   switch (s) {
     case "excellent":
-      return { label: "Excellent", color: "text-success", dot: "bg-success", ring: "border-success/30" };
+      return {
+        label: "Excellent",
+        color: "text-success",
+        dot: "bg-success",
+        ring: "border-success/30",
+      };
     case "good":
       return { label: "Good", color: "text-success", dot: "bg-success", ring: "border-success/30" };
     case "warning":
-      return { label: "Warning", color: "text-warning", dot: "bg-warning", ring: "border-warning/30" };
+      return {
+        label: "Warning",
+        color: "text-warning",
+        dot: "bg-warning",
+        ring: "border-warning/30",
+      };
     case "critical":
-      return { label: "Critical", color: "text-destructive", dot: "bg-destructive", ring: "border-destructive/30" };
+      return {
+        label: "Critical",
+        color: "text-destructive",
+        dot: "bg-destructive",
+        ring: "border-destructive/30",
+      };
   }
 }
