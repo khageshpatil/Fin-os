@@ -16,7 +16,8 @@ import appCss from "../styles.css?url";
 import { reportAppError } from "../lib/app-error-reporting";
 import { SidebarProvider, SidebarTrigger } from "@/components/ui/sidebar";
 import { AppSidebar } from "@/components/app-sidebar";
-import { loadProfile } from "@/lib/profile-store";
+import { loadProfile, migrateProfileV1ToV2 } from "@/lib/profile/store";
+import { migrateHistoryV1ToV2 } from "@/lib/profile/history";
 
 function NotFoundComponent() {
   return (
@@ -86,12 +87,6 @@ export const Route = createRootRouteWithContext<{ queryClient: QueryClient }>()(
       { title: "WealthOS — Personal Financial Operating System" },
       { name: "description", content: "Score, evaluate and decide with WealthOS — a personal financial discipline scorecard." },
       { name: "author", content: "WealthOS" },
-      { property: "og:title", content: "WealthOS — Personal Financial Operating System" },
-      { property: "og:description", content: "Score, evaluate and decide with WealthOS — a personal financial discipline scorecard." },
-      { property: "og:type", content: "website" },
-      { name: "twitter:title", content: "WealthOS — Personal Financial Operating System" },
-      { name: "twitter:description", content: "Score, evaluate and decide with WealthOS — a personal financial discipline scorecard." },
-      { name: "twitter:card", content: "summary_large_image" },
     ],
     links: [
       { rel: "stylesheet", href: appCss },
@@ -134,11 +129,18 @@ function RootComponent() {
     return document.documentElement.classList.contains("dark") ? "dark" : "light";
   });
 
+  // Run migrations on boot
+  useEffect(() => {
+    migrateProfileV1ToV2();
+    migrateHistoryV1ToV2();
+  }, []);
+
   // Check if onboarding is needed
   useEffect(() => {
     const profile = loadProfile();
-    // If onboarding is not complete and we're not on the onboarding page, redirect
-    if (!profile.onboardingComplete && location.pathname !== "/onboarding") {
+    // Allow landing page and onboarding itself without redirecting
+    const noRedirectPaths = ["/onboarding", "/", "/landing"];
+    if (!profile.onboardingComplete && !noRedirectPaths.includes(location.pathname)) {
       navigate({ to: "/onboarding" });
     }
   }, [navigate, location.pathname]);
@@ -150,8 +152,13 @@ function RootComponent() {
     localStorage.setItem("wealthos-theme", theme);
   }, [theme]);
 
-  // Don't render sidebar layout during onboarding
-  if (location.pathname === "/onboarding") {
+  // Don't render sidebar layout during onboarding or on landing pages
+  const isFullscreenPage = location.pathname === "/onboarding" || location.pathname === "/landing";
+  // Also check if onboarded — if not, root path shows landing too
+  const profile = loadProfile();
+  const isRootLanding = location.pathname === "/" && !profile.onboardingComplete;
+
+  if (isFullscreenPage || isRootLanding) {
     return (
       <QueryClientProvider client={queryClient}>
         <Outlet />
@@ -167,7 +174,6 @@ function RootComponent() {
           <div className="flex min-w-0 flex-1 flex-col">
             <header className="sticky top-0 z-30 flex h-12 items-center gap-2 border-b border-border/60 bg-background/80 px-4 backdrop-blur-md">
               <SidebarTrigger className="h-8 w-8" />
-              <div className="ml-1 text-xs text-muted-foreground">WealthOS</div>
               <div className="ml-auto flex items-center gap-2">
                 <button
                   type="button"
@@ -178,9 +184,6 @@ function RootComponent() {
                   {theme === "dark" ? <SunMedium className="h-3.5 w-3.5" /> : <MoonStar className="h-3.5 w-3.5" />}
                   <span className="hidden sm:inline">{theme === "dark" ? "Light" : "Dark"}</span>
                 </button>
-                <kbd className="hidden h-6 items-center gap-1 rounded border border-border/60 bg-muted/40 px-1.5 text-[10px] font-medium text-muted-foreground sm:inline-flex">
-                  ⌘ K
-                </kbd>
               </div>
             </header>
             <main className="flex-1">

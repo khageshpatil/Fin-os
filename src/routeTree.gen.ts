@@ -10,19 +10,14 @@
 
 import { Route as rootRouteImport } from './routes/__root'
 import { Route as SettingsRouteImport } from './routes/settings'
-import { Route as RulesRouteImport } from './routes/rules'
 import { Route as PlannerRouteImport } from './routes/planner'
 import { Route as OnboardingRouteImport } from './routes/onboarding'
+import { Route as LandingRouteImport } from './routes/landing'
 import { Route as IndexRouteImport } from './routes/index'
 
 const SettingsRoute = SettingsRouteImport.update({
   id: '/settings',
   path: '/settings',
-  getParentRoute: () => rootRouteImport,
-} as any)
-const RulesRoute = RulesRouteImport.update({
-  id: '/rules',
-  path: '/rules',
   getParentRoute: () => rootRouteImport,
 } as any)
 const PlannerRoute = PlannerRouteImport.update({
@@ -35,6 +30,11 @@ const OnboardingRoute = OnboardingRouteImport.update({
   path: '/onboarding',
   getParentRoute: () => rootRouteImport,
 } as any)
+const LandingRoute = LandingRouteImport.update({
+  id: '/landing',
+  path: '/landing',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const IndexRoute = IndexRouteImport.update({
   id: '/',
   path: '/',
@@ -43,39 +43,39 @@ const IndexRoute = IndexRouteImport.update({
 
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
+  '/landing': typeof LandingRoute
   '/onboarding': typeof OnboardingRoute
   '/planner': typeof PlannerRoute
-  '/rules': typeof RulesRoute
   '/settings': typeof SettingsRoute
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
+  '/landing': typeof LandingRoute
   '/onboarding': typeof OnboardingRoute
   '/planner': typeof PlannerRoute
-  '/rules': typeof RulesRoute
   '/settings': typeof SettingsRoute
 }
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
   '/': typeof IndexRoute
+  '/landing': typeof LandingRoute
   '/onboarding': typeof OnboardingRoute
   '/planner': typeof PlannerRoute
-  '/rules': typeof RulesRoute
   '/settings': typeof SettingsRoute
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
-  fullPaths: '/' | '/onboarding' | '/planner' | '/rules' | '/settings'
+  fullPaths: '/' | '/landing' | '/onboarding' | '/planner' | '/settings'
   fileRoutesByTo: FileRoutesByTo
-  to: '/' | '/onboarding' | '/planner' | '/rules' | '/settings'
-  id: '__root__' | '/' | '/onboarding' | '/planner' | '/rules' | '/settings'
+  to: '/' | '/landing' | '/onboarding' | '/planner' | '/settings'
+  id: '__root__' | '/' | '/landing' | '/onboarding' | '/planner' | '/settings'
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
   IndexRoute: typeof IndexRoute
+  LandingRoute: typeof LandingRoute
   OnboardingRoute: typeof OnboardingRoute
   PlannerRoute: typeof PlannerRoute
-  RulesRoute: typeof RulesRoute
   SettingsRoute: typeof SettingsRoute
 }
 
@@ -86,13 +86,6 @@ declare module '@tanstack/react-router' {
       path: '/settings'
       fullPath: '/settings'
       preLoaderRoute: typeof SettingsRouteImport
-      parentRoute: typeof rootRouteImport
-    }
-    '/rules': {
-      id: '/rules'
-      path: '/rules'
-      fullPath: '/rules'
-      preLoaderRoute: typeof RulesRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/planner': {
@@ -109,6 +102,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof OnboardingRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/landing': {
+      id: '/landing'
+      path: '/landing'
+      fullPath: '/landing'
+      preLoaderRoute: typeof LandingRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/': {
       id: '/'
       path: '/'
@@ -121,9 +121,9 @@ declare module '@tanstack/react-router' {
 
 const rootRouteChildren: RootRouteChildren = {
   IndexRoute: IndexRoute,
+  LandingRoute: LandingRoute,
   OnboardingRoute: OnboardingRoute,
   PlannerRoute: PlannerRoute,
-  RulesRoute: RulesRoute,
   SettingsRoute: SettingsRoute,
 }
 export const routeTree = rootRouteImport

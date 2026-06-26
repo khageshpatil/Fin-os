@@ -1,5 +1,5 @@
 import { Link, useRouterState } from "@tanstack/react-router";
-import { LayoutDashboard, ListChecks, Sparkles, Settings, Command } from "lucide-react";
+import { LayoutDashboard, Sparkles, Settings, Command } from "lucide-react";
 import {
   Sidebar,
   SidebarContent,
@@ -16,7 +16,6 @@ import {
 
 const items = [
   { title: "Dashboard", url: "/", icon: LayoutDashboard },
-  { title: "Rules", url: "/rules", icon: ListChecks },
   { title: "Planner", url: "/planner", icon: Sparkles },
   { title: "Settings", url: "/settings", icon: Settings },
 ] as const;

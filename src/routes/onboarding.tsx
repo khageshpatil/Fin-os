@@ -1,36 +1,36 @@
 import { createFileRoute, useNavigate } from "@tanstack/react-router";
 import { useMemo, useState } from "react";
-import { ArrowLeft, ArrowRight, CheckCircle2, Shield, Wallet } from "lucide-react";
-import { loadProfile, recordCheckIn, saveProfile } from "@/lib/profile-store";
-import { type FinancialProfile, createBlankProfile } from "@/lib/financial";
+import { Shield, Wallet, CheckCircle2, Info, ArrowRight, Check } from "lucide-react";
+import { loadProfile, saveProfile } from "@/lib/profile/store";
+import { recordCheckIn } from "@/lib/profile/history";
+import { evaluateRules, disciplineScore, topActions } from "@/lib/rules/engine";
+import { type FinancialProfile, createBlankProfile } from "@/lib/profile/types";
+import { inr } from "@/lib/format";
 
 export const Route = createFileRoute("/onboarding")({
   head: () => ({
     meta: [
-      { title: "Onboarding — WealthOS" },
-      { name: "description", content: "Set up WealthOS with your real financial numbers in a detailed guided flow." },
+      { title: "Setup Scorecard — WealthOS" },
+      { name: "description", content: "Onboard and seed your financial discipline scorecard." },
     ],
   }),
   component: OnboardingPage,
 });
 
-type Step = 0 | 1 | 2 | 3 | 4;
-
 const employmentOptions = [
   { value: "salaried", label: "Salaried" },
   { value: "self-employed", label: "Self-employed" },
-  { value: "startup", label: "Startup / variable" },
+  { value: "startup", label: "Variable / Startup" },
 ];
 
 const goalOptions = [
-  { value: "wealth-creation", label: "Wealth creation" },
-  { value: "debt-freedom", label: "Debt freedom" },
-  { value: "early-retirement", label: "Early retirement" },
+  { value: "wealth-creation", label: "Wealth Creation" },
+  { value: "debt-freedom", label: "Debt Freedom" },
+  { value: "early-retirement", label: "Early Retirement" },
 ];
 
 function OnboardingPage() {
   const navigate = useNavigate();
-  const [step, setStep] = useState<Step>(0);
   const [profile, setProfile] = useState<FinancialProfile>(() => {
     const saved = loadProfile();
     return saved.onboardingComplete ? saved : { ...createBlankProfile(), ...saved };
@@ -40,254 +40,299 @@ function OnboardingPage() {
     setProfile((current) => ({ ...current, [key]: value }));
   };
 
-  const completion = useMemo(() => {
-    const fields = [
-      profile.monthlyIncome,
-      profile.monthlyExpenses,
-      profile.monthlyNeeds,
-      profile.monthlyWants,
-      profile.emergencyFund,
-      profile.healthInsurance,
-      profile.termInsurance,
-      profile.creditLimit,
-      profile.creditUsage,
-      profile.monthlySIP,
-      profile.sipLastYear,
-      profile.mutualFunds,
-      profile.stocks,
-      profile.epf,
-      profile.gold,
-      profile.loans,
-    ];
-    const filled = fields.filter((value) => value > 0).length;
-    return Math.round((filled / fields.length) * 100);
+  const isValid = useMemo(() => {
+    return profile.monthlyIncome > 0 && profile.monthlyExpenses >= 0;
   }, [profile]);
 
   const saveAndFinish = () => {
+    if (!isValid) return;
     const completedProfile = { ...profile, onboardingComplete: true };
     saveProfile(completedProfile);
-    recordCheckIn(completedProfile);
+    // Create initial snapshot check-in
+    recordCheckIn(completedProfile, evaluateRules, disciplineScore, topActions);
     navigate({ to: "/" });
   };
 
   return (
-    <div className="min-h-screen bg-background px-4 py-8">
-      <div className="mx-auto w-full max-w-5xl">
-        <div className="mb-8 flex flex-col gap-4 rounded-2xl border border-border bg-card p-6 lg:flex-row lg:items-end lg:justify-between">
-          <div>
-            <div className="text-[11px] font-medium uppercase tracking-[0.18em] text-muted-foreground">Setup</div>
-            <h1 className="mt-1 text-3xl font-semibold tracking-tight text-foreground">Personal setup for your 9-rule scorecard</h1>
-            <p className="mt-2 max-w-2xl text-sm leading-relaxed text-muted-foreground">
-              Fill in your real numbers once. The dashboard, rules, and planner will then reflect your actual financial situation instead of a demo profile.
-            </p>
-          </div>
-
-          <div className="grid gap-2 rounded-xl border border-border/70 bg-background/50 px-4 py-3 text-sm">
-            <div className="flex items-center gap-2 text-foreground">
-              <Wallet className="h-4 w-4 text-muted-foreground" />
-              Use real monthly income, expenses, assets, and debt
+    <div className="min-h-screen bg-background text-foreground px-4 py-12 md:px-8">
+      <div className="mx-auto w-full max-w-4xl">
+        {/* Header and Philosophy */}
+        <div className="mb-10 rounded-2xl border border-border bg-card p-6 shadow-sm relative overflow-hidden">
+          <div className="absolute top-0 right-0 w-32 h-32 bg-primary/5 rounded-full filter blur-3xl -mr-10 -mt-10 pointer-events-none" />
+          <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
+            <div className="space-y-1.5 max-w-2xl">
+              <span className="text-[10px] font-bold uppercase tracking-widest text-primary">WealthOS Framework</span>
+              <h1 className="text-2xl md:text-3xl font-bold tracking-tight">Your Financial Discipline Scorecard</h1>
+              <p className="text-sm leading-relaxed text-muted-foreground">
+                Enter your current numbers once. The WealthOS framework grades your discipline across nine rules.
+                This is a <strong>monthly ritual tool</strong> to guide your next action, not a high-frequency stock ticker.
+              </p>
             </div>
-            <div className="flex items-center gap-2 text-foreground">
-              <Shield className="h-4 w-4 text-muted-foreground" />
-              Every field maps to one or more of the 9 rules
+            <div className="shrink-0 flex flex-col gap-2.5 rounded-xl border border-border/80 bg-background/50 px-4 py-3 text-xs md:max-w-xs">
+              <div className="flex items-start gap-2">
+                <Wallet className="h-4 w-4 mt-0.5 text-primary shrink-0" />
+                <span><strong>No APIs or banks linked:</strong> 100% private and stored locally in your browser storage.</span>
+              </div>
+              <div className="flex items-start gap-2">
+                <Shield className="h-4 w-4 mt-0.5 text-primary shrink-0" />
+                <span><strong>Actionable metrics:</strong> Focuses on buffers, savings rates, and debt discipline.</span>
+              </div>
             </div>
           </div>
         </div>
 
-        <StepTracker step={step} />
-
-        {step === 0 && (
+        {/* Form Sections */}
+        <div className="space-y-8">
+          {/* Section 1: Cash Flow & Basics */}
           <SectionCard
-            eyebrow="Basics"
-            title="Your core financial context"
-            subtitle="This gives the dashboard a stable base and helps tailor the language of the rules."
+            title="1. Cash Flow & Context"
+            subtitle="The foundation of all formulas. Enter what's true for you today."
           >
-            <div className="grid gap-4 md:grid-cols-2">
-              <NumberField label="Monthly income" value={profile.monthlyIncome} onChange={(value) => update("monthlyIncome", value)} prefix="₹" required />
-              <NumberField label="Monthly expenses" value={profile.monthlyExpenses} onChange={(value) => update("monthlyExpenses", value)} prefix="₹" required />
-              <NumberField label="Number of dependents" value={profile.dependents} onChange={(value) => update("dependents", value)} />
-              <SelectField label="Employment type" value={profile.employmentType} onChange={(value) => update("employmentType", value)} options={employmentOptions} />
-              <SelectField label="Primary goal" value={profile.financialGoal} onChange={(value) => update("financialGoal", value)} options={goalOptions} />
-              <TextHint>
-                Use your current real income and spending. If your monthly pay fluctuates, enter the average you actually live on.
-              </TextHint>
-            </div>
-          </SectionCard>
-        )}
-
-        {step === 1 && (
-          <SectionCard
-            eyebrow="Budget"
-            title="How your monthly cash flow is split"
-            subtitle="This is what makes the 50-30-20 rule useful instead of abstract."
-          >
-            <div className="grid gap-4 md:grid-cols-2">
-              <NumberField label="Monthly needs" value={profile.monthlyNeeds || 0} onChange={(value) => update("monthlyNeeds", value)} prefix="₹" />
-              <NumberField label="Monthly wants" value={profile.monthlyWants || 0} onChange={(value) => update("monthlyWants", value)} prefix="₹" />
-              <NumberField label="Monthly SIP" value={profile.monthlySIP} onChange={(value) => update("monthlySIP", value)} prefix="₹" />
-              <NumberField label="SIP amount a year ago" value={profile.sipLastYear} onChange={(value) => update("sipLastYear", value)} prefix="₹" />
-              <DateField label="SIP start date" value={profile.sipStartDate} onChange={(value) => update("sipStartDate", value)} />
-              <NumberField label="Monthly loan EMI" value={profile.loans} onChange={(value) => update("loans", value)} prefix="₹" />
-              <SelectField
-                label="Three-account system"
-                value={profile.threeAccountSystem ? "yes" : "no"}
-                onChange={(value) => update("threeAccountSystem", value === "yes")}
-                options={[
-                  { value: "yes", label: "Yes" },
-                  { value: "no", label: "No" },
-                ]}
+            <div className="grid gap-5 sm:grid-cols-2">
+              <NumberField
+                label="Monthly Income"
+                value={profile.monthlyIncome}
+                onChange={(v) => update("monthlyIncome", v)}
+                prefix="₹"
+                required
+                hint="Your actual post-tax take-home monthly pay."
               />
-              <TextHint>
-                If you already know your needs/wants breakdown, enter it now. If not, start with your best estimate and refine it later in Settings.
-              </TextHint>
-            </div>
-          </SectionCard>
-        )}
-
-        {step === 2 && (
-          <SectionCard
-            eyebrow="Protection"
-            title="Safety net and credit exposure"
-            subtitle="These inputs power the emergency fund, insurance, and credit utilization rules."
-          >
-            <div className="grid gap-4 md:grid-cols-2">
-              <NumberField label="Emergency fund" value={profile.emergencyFund} onChange={(value) => update("emergencyFund", value)} prefix="₹" />
-              <NumberField label="Health insurance cover" value={profile.healthInsurance} onChange={(value) => update("healthInsurance", value)} prefix="₹" />
-              <NumberField label="Term insurance cover" value={profile.termInsurance} onChange={(value) => update("termInsurance", value)} prefix="₹" />
-              <NumberField label="Credit limit" value={profile.creditLimit} onChange={(value) => update("creditLimit", value)} prefix="₹" />
-              <NumberField label="Current credit usage" value={profile.creditUsage} onChange={(value) => update("creditUsage", value)} prefix="₹" />
-              <TextHint>
-                Enter the actual sum insured, not the premium. Credit usage should be the outstanding balance currently reported on your card.
-              </TextHint>
-            </div>
-          </SectionCard>
-        )}
-
-        {step === 3 && (
-          <SectionCard
-            eyebrow="Investments"
-            title="Where your wealth is already parked"
-            subtitle="This is the input layer for net worth, gold allocation, and the investment-rate rule."
-          >
-            <div className="grid gap-4 md:grid-cols-2">
-              <NumberField label="Mutual funds" value={profile.mutualFunds} onChange={(value) => update("mutualFunds", value)} prefix="₹" />
-              <NumberField label="Stocks" value={profile.stocks} onChange={(value) => update("stocks", value)} prefix="₹" />
-              <NumberField label="EPF / provident fund" value={profile.epf} onChange={(value) => update("epf", value)} prefix="₹" />
-              <NumberField label="Gold" value={profile.gold} onChange={(value) => update("gold", value)} prefix="₹" />
-              <div className="md:col-span-2 rounded-xl border border-border/70 bg-background/50 p-4 text-sm text-muted-foreground">
-                If you hold other assets, keep them outside the scorecard for now. The app is optimized for the 9 rules you actually want to track daily.
+              <NumberField
+                label="Monthly Expenses"
+                value={profile.monthlyExpenses}
+                onChange={(v) => update("monthlyExpenses", v)}
+                prefix="₹"
+                required
+                hint="Your average monthly outflows (rent, food, lifestyle, etc.)"
+              />
+              <NumberField
+                label="Number of Dependents"
+                value={profile.dependents}
+                onChange={(v) => update("dependents", v)}
+                hint="For adjusting term insurance adequacy benchmarks."
+              />
+              <SelectField
+                label="Employment Type"
+                value={profile.employmentType}
+                onChange={(v) => update("employmentType", v)}
+                options={employmentOptions}
+              />
+              <div className="sm:col-span-2">
+                <SelectField
+                  label="Primary Financial Goal"
+                  value={profile.financialGoal}
+                  onChange={(v) => update("financialGoal", v)}
+                  options={goalOptions}
+                />
               </div>
             </div>
           </SectionCard>
-        )}
 
-        {step === 4 && (
+          {/* Section 2: Budget split */}
           <SectionCard
-            eyebrow="Review"
-            title="Check the profile before activating"
-            subtitle="This is the last pass before the dashboard starts using your real numbers."
+            title="2. Spending Allocation (Optional)"
+            subtitle="Splits your expenses into categories to unlock detailed 50-30-20 budget scoring."
           >
-            <div className="grid gap-4 lg:grid-cols-[minmax(0,1.4fr)_minmax(0,1fr)]">
-              <div className="space-y-3 rounded-xl border border-border/70 bg-background/40 p-4 text-sm">
-                <SummaryRow label="Income" value={inr(profile.monthlyIncome)} />
-                <SummaryRow label="Expenses" value={inr(profile.monthlyExpenses)} />
-                <SummaryRow label="Needs / Wants" value={`${inr(profile.monthlyNeeds || 0)} / ${inr(profile.monthlyWants || 0)}`} />
-                <SummaryRow label="Emergency fund" value={inr(profile.emergencyFund)} />
-                <SummaryRow label="Insurance cover" value={`${inr(profile.healthInsurance)} health / ${inr(profile.termInsurance)} term`} />
-                <SummaryRow label="Investments" value={`${inr(profile.mutualFunds)} MF / ${inr(profile.stocks)} stocks / ${inr(profile.epf)} EPF / ${inr(profile.gold)} gold`} />
+            <div className="grid gap-5 sm:grid-cols-2">
+              <NumberField
+                label="Monthly Needs"
+                value={profile.monthlyNeeds || 0}
+                onChange={(v) => update("monthlyNeeds", v)}
+                prefix="₹"
+                hint="Essential bills, groceries, rent, utilities, minimum EMIs."
+              />
+              <NumberField
+                label="Monthly Wants"
+                value={profile.monthlyWants || 0}
+                onChange={(v) => update("monthlyWants", v)}
+                prefix="₹"
+                hint="Discretionary: dining out, shopping, travel, entertainment."
+              />
+              <div className="sm:col-span-2 rounded-lg border border-border bg-muted/20 p-3 text-xs leading-relaxed text-muted-foreground flex gap-2">
+                <Info className="h-4 w-4 text-muted-foreground shrink-0 mt-0.5" />
+                <span>
+                  If left at zero, the engine conservatively models your entire monthly expenses as Needs. Enter values here for a more nuanced discipline rating.
+                </span>
               </div>
+            </div>
+          </SectionCard>
 
-              <div className="rounded-xl border border-border/70 bg-background/40 p-4">
-                <div className="text-[10px] font-medium uppercase tracking-[0.18em] text-muted-foreground">Completion</div>
-                <div className="mt-2 text-4xl font-semibold tracking-tight text-foreground">{completion}%</div>
-                <p className="mt-2 text-sm leading-relaxed text-muted-foreground">
-                  A higher completion score means the dashboard can produce better rule guidance. Any field left at zero will be treated as an actual zero.
-                </p>
-                <div className="mt-4 rounded-lg border border-border/60 bg-card p-3 text-xs text-muted-foreground">
-                  After saving, the dashboard will show only your real profile values and the 9-rule score will update from this data.
+          {/* Section 3: Safety Nets */}
+          <SectionCard
+            title="3. Protection & Safety Net"
+            subtitle="Evaluates your buffer size against sudden emergencies and risk exposure."
+          >
+            <div className="grid gap-5 sm:grid-cols-2">
+              <NumberField
+                label="Emergency Fund"
+                value={profile.emergencyFund}
+                onChange={(v) => update("emergencyFund", v)}
+                prefix="₹"
+                hint="Liquid cash in savings accounts or short-term deposits."
+              />
+              <NumberField
+                label="Health Insurance Cover"
+                value={profile.healthInsurance}
+                onChange={(v) => update("healthInsurance", v)}
+                prefix="₹"
+                hint="Sum insured of your personal or corporate medical policy."
+              />
+              <div className="sm:col-span-2">
+                <NumberField
+                  label="Term Insurance Cover"
+                  value={profile.termInsurance}
+                  onChange={(v) => update("termInsurance", v)}
+                  prefix="₹"
+                  hint="Pure term plan coverage amount (death benefit)."
+                />
+              </div>
+            </div>
+          </SectionCard>
+
+          {/* Section 4: SIP & Wealth Accumulation */}
+          <SectionCard
+            title="4. Investments & SIP Cadence"
+            subtitle="Tracks how much you systematically accumulate and where your net assets sit."
+          >
+            <div className="grid gap-5 sm:grid-cols-2">
+              <NumberField
+                label="Monthly SIP Amount"
+                value={profile.monthlyInvestment}
+                onChange={(v) => update("monthlyInvestment", v)}
+                prefix="₹"
+                hint="Total automated monthly investments (mutual funds, stocks, etc.)"
+              />
+              <NumberField
+                label="SIP Amount (One Year Ago)"
+                value={profile.investmentLastYear}
+                onChange={(v) => update("investmentLastYear", v)}
+                prefix="₹"
+                hint="Used to score your step-up investment rate discipline."
+              />
+              <DateField
+                label="SIP / Investment Start Date"
+                value={profile.investmentStartDate}
+                onChange={(v) => update("investmentStartDate", v)}
+              />
+              <NumberField
+                label="Mutual Funds Balance"
+                value={profile.mutualFunds}
+                onChange={(v) => update("mutualFunds", v)}
+                prefix="₹"
+              />
+              <NumberField
+                label="Stocks Value"
+                value={profile.stocks}
+                onChange={(v) => update("stocks", v)}
+                prefix="₹"
+              />
+              <NumberField
+                label="EPF / PPF Balance"
+                value={profile.epf}
+                onChange={(v) => update("epf", v)}
+                prefix="₹"
+              />
+              <div className="sm:col-span-2">
+                <NumberField
+                  label="Gold Allocation"
+                  value={profile.gold}
+                  onChange={(v) => update("gold", v)}
+                  prefix="₹"
+                  hint="Physical or digital gold investments for asset diversification."
+                />
+              </div>
+            </div>
+          </SectionCard>
+
+          {/* Section 5: Credit & Debt */}
+          <SectionCard
+            title="5. Debt & Account Discipline"
+            subtitle="Checks your utilization ratios and automated money routing structures."
+          >
+            <div className="grid gap-5 sm:grid-cols-2">
+              <NumberField
+                label="Credit Card Limits"
+                value={profile.creditLimit}
+                onChange={(v) => update("creditLimit", v)}
+                prefix="₹"
+                hint="Combined limit across all active credit cards."
+              />
+              <NumberField
+                label="Current Card Outstanding"
+                value={profile.creditUsage}
+                onChange={(v) => update("creditUsage", v)}
+                prefix="₹"
+                hint="Total unpaid balance reported on cards."
+              />
+              <NumberField
+                label="Monthly Loan EMIs"
+                value={profile.monthlyEMI}
+                onChange={(v) => update("monthlyEMI", v)}
+                prefix="₹"
+                hint="Total monthly EMIs (home, auto, personal loans)."
+              />
+              <div>
+                <div className="text-[11px] font-medium uppercase tracking-wider text-muted-foreground mb-1.5">
+                  Three-Account System
+                </div>
+                <div className="flex items-start gap-3 rounded-md border border-border bg-background/30 p-3 h-[70px]">
+                  <input
+                    type="checkbox"
+                    id="threeAccount"
+                    checked={profile.threeAccountSystem}
+                    onChange={(e) => update("threeAccountSystem", e.target.checked)}
+                    className="h-4 w-4 rounded border-border bg-card text-primary focus:ring-primary mt-0.5"
+                  />
+                  <label htmlFor="threeAccount" className="text-xs text-muted-foreground select-none cursor-pointer">
+                    <strong className="text-foreground font-medium block">Three dedicated accounts</strong>
+                    Separate Spending, Savings, and Investment accounts to control impulses.
+                  </label>
                 </div>
               </div>
             </div>
           </SectionCard>
-        )}
+        </div>
 
-        <div className="mt-6 flex items-center justify-between gap-3">
+        {/* Action Button & Errors */}
+        <div className="mt-10 flex flex-col items-center gap-4 rounded-xl border border-border/80 bg-card p-5">
+          {!isValid ? (
+            <div className="text-xs text-destructive flex items-center gap-1.5">
+              <Info className="h-4 w-4" /> Please enter a valid Monthly Income (greater than zero) to proceed.
+            </div>
+          ) : (
+            <div className="text-xs text-success flex items-center gap-1.5">
+              <Check className="h-4 w-4" /> Ready to initialize! Check over your numbers, then click below.
+            </div>
+          )}
+
           <button
             type="button"
-            onClick={() => setStep((current) => (current > 0 ? ((current - 1) as Step) : current))}
-            className="inline-flex items-center gap-2 rounded-md border border-border bg-card px-4 py-2 text-sm font-medium text-foreground transition-colors hover:bg-accent disabled:cursor-not-allowed disabled:opacity-40"
-            disabled={step === 0}
+            onClick={saveAndFinish}
+            disabled={!isValid}
+            className="w-full sm:w-auto inline-flex items-center justify-center gap-2 rounded-md bg-foreground px-6 py-3 font-semibold text-background hover:opacity-90 transition-opacity disabled:opacity-40 disabled:cursor-not-allowed cursor-pointer"
           >
-            <ArrowLeft className="h-4 w-4" /> Back
+            Activate Dashboard <ArrowRight className="h-4 w-4" />
           </button>
-
-          {step < 4 ? (
-            <button
-              type="button"
-              onClick={() => setStep((current) => ((current + 1) as Step))}
-              className="inline-flex items-center gap-2 rounded-md bg-foreground px-4 py-2 text-sm font-medium text-background transition-colors hover:opacity-90"
-            >
-              Continue <ArrowRight className="h-4 w-4" />
-            </button>
-          ) : (
-            <button
-              type="button"
-              onClick={saveAndFinish}
-              className="inline-flex items-center gap-2 rounded-md bg-foreground px-4 py-2 text-sm font-medium text-background transition-colors hover:opacity-90"
-            >
-              Activate dashboard <CheckCircle2 className="h-4 w-4" />
-            </button>
-          )}
         </div>
       </div>
     </div>
   );
 }
 
-function StepTracker({ step }: { step: Step }) {
-  const labels = ["Basics", "Budget", "Protection", "Investments", "Review"];
-  return (
-    <div className="mb-6 grid gap-2 md:grid-cols-5">
-      {labels.map((label, index) => {
-        const active = step === index;
-        const complete = step > index;
-        return (
-          <div
-            key={label}
-            className={`rounded-lg border px-3 py-2 text-xs font-medium ${
-              active
-                ? "border-foreground bg-card text-foreground"
-                : complete
-                ? "border-success/40 bg-success/10 text-success"
-                : "border-border bg-card text-muted-foreground"
-            }`}
-          >
-            <div className="uppercase tracking-[0.16em]">Step {index + 1}</div>
-            <div className="mt-1 text-sm font-semibold tracking-tight">{label}</div>
-          </div>
-        );
-      })}
-    </div>
-  );
-}
-
 function SectionCard({
-  eyebrow,
   title,
   subtitle,
   children,
 }: {
-  eyebrow: string;
   title: string;
   subtitle: string;
   children: React.ReactNode;
 }) {
   return (
-    <section className="rounded-2xl border border-border bg-card p-6 shadow-sm">
-      <div className="mb-5 border-b border-border/60 pb-4">
-        <div className="text-[11px] font-medium uppercase tracking-[0.18em] text-muted-foreground">{eyebrow}</div>
-        <h2 className="mt-1 text-xl font-semibold tracking-tight text-foreground">{title}</h2>
-        <p className="mt-2 text-sm leading-relaxed text-muted-foreground">{subtitle}</p>
+    <section className="rounded-xl border border-border bg-card p-6 shadow-sm">
+      <div className="mb-5 border-b border-border/60 pb-3">
+        <h2 className="text-base font-semibold tracking-tight text-foreground">{title}</h2>
+        <p className="text-xs text-muted-foreground mt-0.5">{subtitle}</p>
       </div>
       {children}
     </section>
@@ -300,43 +345,54 @@ function NumberField({
   onChange,
   prefix,
   required,
+  hint,
 }: {
   label: string;
   value: number;
   onChange: (value: number) => void;
   prefix?: string;
   required?: boolean;
+  hint?: string;
 }) {
   return (
-    <label className="block">
-      <span className="text-[11px] font-medium uppercase tracking-wider text-muted-foreground">
-        {label} {required ? <span className="text-foreground">*</span> : null}
-      </span>
-      <div className="mt-1.5 flex items-center gap-2 rounded-md border border-border bg-background/50 px-3 focus-within:border-foreground/40">
-        {prefix && <span className="text-sm text-muted-foreground">{prefix}</span>}
-        <input
-          type="number"
-          min="0"
-          value={Number.isFinite(value) ? value : 0}
-          onChange={(event) => onChange(Number(event.target.value) || 0)}
-          className="w-full bg-transparent py-2.5 text-sm font-medium tabular-nums outline-none"
-        />
-      </div>
-    </label>
+    <div className="flex flex-col gap-1.5">
+      <label className="block">
+        <span className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">
+          {label} {required && <span className="text-destructive font-bold">*</span>}
+        </span>
+        <div className="mt-1 flex items-center gap-2 rounded-md border border-border bg-background/30 px-3 focus-within:border-foreground/30">
+          {prefix && <span className="text-sm text-muted-foreground">{prefix}</span>}
+          <input
+            type="number"
+            min="0"
+            value={Number.isFinite(value) ? value : ""}
+            placeholder="0"
+            onChange={(event) => onChange(Number(event.target.value) || 0)}
+            className="w-full bg-transparent py-2.5 text-sm font-medium tabular-nums outline-none"
+          />
+        </div>
+      </label>
+      {hint && <span className="text-[10px] text-muted-foreground/80 leading-normal">{hint}</span>}
+    </div>
   );
 }
 
 function DateField({ label, value, onChange }: { label: string; value: string; onChange: (value: string) => void }) {
   return (
-    <label className="block">
-      <span className="text-[11px] font-medium uppercase tracking-wider text-muted-foreground">{label}</span>
-      <input
-        type="date"
-        value={value.slice(0, 10)}
-        onChange={(event) => onChange(event.target.value)}
-        className="mt-1.5 w-full rounded-md border border-border bg-background/50 px-3 py-2.5 text-sm outline-none focus:border-foreground/40"
-      />
-    </label>
+    <div className="flex flex-col gap-1.5">
+      <label className="block">
+        <span className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">{label}</span>
+        <input
+          type="date"
+          value={value.slice(0, 10)}
+          onChange={(event) => onChange(event.target.value)}
+          className="mt-1 w-full rounded-md border border-border bg-background/30 px-3 py-2 text-sm outline-none focus:border-foreground/30"
+        />
+      </label>
+      <span className="text-[10px] text-muted-foreground/80 leading-normal">
+        Approximate date when you started your systematic investments.
+      </span>
+    </div>
   );
 }
 
@@ -353,8 +409,8 @@ function SelectField<T extends string>({
 }) {
   return (
     <div>
-      <div className="text-[11px] font-medium uppercase tracking-wider text-muted-foreground">{label}</div>
-      <div className="mt-1.5 grid gap-2 sm:grid-cols-3">
+      <div className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground mb-1.5">{label}</div>
+      <div className="grid gap-2 grid-cols-3">
         {options.map((option) => {
           const active = value === option.value;
           return (
@@ -362,10 +418,10 @@ function SelectField<T extends string>({
               key={option.value}
               type="button"
               onClick={() => onChange(option.value)}
-              className={`rounded-md border px-3 py-2 text-left text-sm transition-colors ${
+              className={`rounded-md border py-2 px-2 text-center text-xs font-medium transition-all ${
                 active
-                  ? "border-foreground bg-background text-foreground"
-                  : "border-border bg-background/50 text-muted-foreground hover:border-foreground/30 hover:text-foreground"
+                  ? "border-foreground bg-foreground text-background shadow-sm"
+                  : "border-border bg-background/30 text-muted-foreground hover:border-foreground/30 hover:text-foreground"
               }`}
             >
               {option.label}
@@ -375,25 +431,4 @@ function SelectField<T extends string>({
       </div>
     </div>
   );
-}
-
-function TextHint({ children }: { children: React.ReactNode }) {
-  return <div className="rounded-md border border-border/60 bg-muted/40 p-3 text-xs leading-relaxed text-muted-foreground md:col-span-2">{children}</div>;
-}
-
-function SummaryRow({ label, value }: { label: string; value: string }) {
-  return (
-    <div className="flex items-start justify-between gap-4 border-b border-border/60 pb-2 last:border-b-0 last:pb-0">
-      <span className="text-xs uppercase tracking-wider text-muted-foreground">{label}</span>
-      <span className="text-sm font-medium text-foreground text-right">{value}</span>
-    </div>
-  );
-}
-
-function inr(value: number) {
-  if (!value) return "₹0";
-  if (value >= 10000000) return `₹${(value / 10000000).toFixed(2)} Cr`;
-  if (value >= 100000) return `₹${(value / 100000).toFixed(2)} L`;
-  if (value >= 1000) return `₹${(value / 1000).toFixed(1)}K`;
-  return `₹${Math.round(value)}`;
 }

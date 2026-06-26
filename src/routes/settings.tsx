@@ -2,15 +2,15 @@ import { createFileRoute, useNavigate } from "@tanstack/react-router";
 import { useEffect, useRef, useState } from "react";
 import { PageShell } from "@/components/page-shell";
 import {
-  loadHistory,
   loadProfile,
-  recordCheckIn,
-  replaceProfileAndHistory,
   saveProfile,
-  useHistory,
-} from "@/lib/profile-store";
-import { createBlankProfile, type FinancialProfile } from "@/lib/financial";
-import { Save, RotateCcw, Check, RotateCw, Download, Upload } from "lucide-react";
+  replaceProfileAndHistory,
+} from "@/lib/profile/store";
+import { useHistory, loadHistory } from "@/lib/profile/history";
+import { type FinancialProfile, createBlankProfile } from "@/lib/profile/types";
+import { Section, Field, DateField, Toggle } from "@/components/settings/fields";
+import { DataManagement } from "@/components/settings/data-management";
+import { Save, RotateCcw, Check, RotateCw } from "lucide-react";
 
 export const Route = createFileRoute("/settings")({
   head: () => ({
@@ -29,11 +29,24 @@ function SettingsPage() {
   const fileInputRef = useRef<HTMLInputElement | null>(null);
   const navigate = useNavigate();
 
+  const pendingUpdatesRef = useRef<Set<keyof FinancialProfile>>(new Set());
+
   useEffect(() => {
     const timer = window.setTimeout(() => {
-      saveProfile(profile);
-      setSaved(true);
-    }, 350);
+      const pending = Array.from(pendingUpdatesRef.current);
+      if (pending.length > 0) {
+        const now = new Date().toISOString();
+        const updatedProfile = { ...profile };
+        updatedProfile.profileLastUpdated = now;
+        updatedProfile.fieldTimestamps = { ...updatedProfile.fieldTimestamps };
+        pending.forEach((f) => {
+          updatedProfile.fieldTimestamps[f as string] = now;
+        });
+        saveProfile(updatedProfile);
+        pendingUpdatesRef.current.clear();
+        setSaved(true);
+      }
+    }, 1500);
 
     return () => window.clearTimeout(timer);
   }, [profile]);
@@ -44,19 +57,34 @@ function SettingsPage() {
     return () => window.clearTimeout(timer);
   }, [saved]);
 
-  const update = <K extends keyof FinancialProfile>(k: K, v: FinancialProfile[K]) =>
+  const update = <K extends keyof FinancialProfile>(k: K, v: FinancialProfile[K]) => {
     setProfile((p) => ({ ...p, [k]: v }));
+    pendingUpdatesRef.current.add(k);
+    setSaved(false);
+  };
 
   const handleSave = () => {
-    saveProfile(profile);
-    recordCheckIn(profile);
+    const pending = Array.from(pendingUpdatesRef.current);
+    const now = new Date().toISOString();
+    const updatedProfile = { ...profile };
+    updatedProfile.profileLastUpdated = now;
+    updatedProfile.fieldTimestamps = { ...updatedProfile.fieldTimestamps };
+    pending.forEach((f) => {
+      updatedProfile.fieldTimestamps[f as string] = now;
+    });
+    saveProfile(updatedProfile);
+    pendingUpdatesRef.current.clear();
     setSaved(true);
   };
 
   const handleReset = () => {
+    if (!window.confirm("Are you sure you want to reset your profile to blank? This cannot be undone.")) {
+      return;
+    }
     const blankProfile = createBlankProfile();
     setProfile(blankProfile);
     saveProfile(blankProfile);
+    setSaved(true);
   };
 
   const handleReOnboard = () => {
@@ -70,6 +98,7 @@ function SettingsPage() {
       profile,
       history,
       exportedAt: new Date().toISOString(),
+      version: 2,
     };
 
     const blob = new Blob([JSON.stringify(payload, null, 2)], { type: "application/json" });
@@ -91,36 +120,24 @@ function SettingsPage() {
 
     try {
       const text = await file.text();
-      const parsed = JSON.parse(text) as {
-        profile?: FinancialProfile;
-        history?: ReturnType<typeof loadHistory>;
-      } & FinancialProfile;
+      const parsed = JSON.parse(text);
 
-      const importedProfile = parsed.profile ? { ...createBlankProfile(), ...parsed.profile } : { ...createBlankProfile(), ...parsed };
+      const importedProfile = parsed.profile
+        ? { ...createBlankProfile(), ...parsed.profile }
+        : { ...createBlankProfile(), ...parsed };
+
       const importedHistory = Array.isArray(parsed.history) ? parsed.history : [];
 
-      if (parsed.profile) {
-        replaceProfileAndHistory(importedProfile, importedHistory);
-      } else {
-        replaceProfileAndHistory(importedProfile, []);
-      }
-
+      replaceProfileAndHistory(importedProfile, importedHistory);
       setProfile(importedProfile);
       setSaved(true);
+      window.alert("Backup imported successfully!");
     } catch {
       window.alert("That backup file could not be read.");
     } finally {
       event.target.value = "";
     }
   };
-
-  const handleLogCheckIn = () => {
-    saveProfile(profile);
-    recordCheckIn(profile);
-    setSaved(true);
-  };
-
-  const latestCheckIn = history[0];
 
   return (
     <PageShell
@@ -131,62 +148,34 @@ function SettingsPage() {
         <>
           <button
             onClick={handleReset}
-            className="inline-flex items-center gap-1.5 rounded-md border border-border bg-card px-3 py-2 text-xs font-medium text-muted-foreground hover:bg-accent hover:text-foreground"
+            className="inline-flex items-center gap-1.5 rounded-md border border-border bg-card px-3 py-2 text-xs font-semibold text-muted-foreground hover:bg-accent hover:text-foreground cursor-pointer transition-all"
           >
             <RotateCcw className="h-3.5 w-3.5" /> Reset to blank
           </button>
           <button
             onClick={handleReOnboard}
-            className="inline-flex items-center gap-1.5 rounded-md border border-border bg-card px-3 py-2 text-xs font-medium text-muted-foreground hover:bg-accent hover:text-foreground"
+            className="inline-flex items-center gap-1.5 rounded-md border border-border bg-card px-3 py-2 text-xs font-semibold text-muted-foreground hover:bg-accent hover:text-foreground cursor-pointer transition-all"
           >
             <RotateCw className="h-3.5 w-3.5" /> Re-do setup
           </button>
           <button
-            onClick={handleLogCheckIn}
-            className="inline-flex items-center gap-1.5 rounded-md bg-foreground px-3 py-2 text-xs font-medium text-background hover:opacity-90"
+            onClick={handleSave}
+            className="inline-flex items-center gap-1.5 rounded-md bg-foreground px-3 py-2 text-xs font-semibold text-background hover:opacity-90 cursor-pointer transition-all"
           >
             {saved ? <Check className="h-3.5 w-3.5" /> : <Save className="h-3.5 w-3.5" />}
-            {saved ? "Saved" : "Log Check-in"}
+            {saved ? "Saved" : "Save Changes"}
           </button>
         </>
       }
     >
       <div className="space-y-6">
-        <Section title="Tracking & Backup" subtitle="Autosave is on. Use check-ins to snapshot your progress, then export or import a full backup anytime.">
-          <div className="rounded-md border border-border bg-background/40 p-4 sm:col-span-2 lg:col-span-3">
-            <div className="grid gap-4 lg:grid-cols-3">
-              <div>
-                <div className="text-[11px] font-medium uppercase tracking-wider text-muted-foreground">Last check-in</div>
-                <div className="mt-1 text-sm font-medium text-foreground">
-                  {latestCheckIn ? formatCheckInDate(latestCheckIn.createdAt) : "No check-ins yet"}
-                </div>
-                <div className="mt-1 text-xs text-muted-foreground">History entries: {history.length}</div>
-              </div>
-              <div>
-                <div className="text-[11px] font-medium uppercase tracking-wider text-muted-foreground">Auto-save</div>
-                <div className="mt-1 text-sm font-medium text-foreground">Enabled</div>
-                <div className="mt-1 text-xs text-muted-foreground">Every edit is saved automatically after a short pause.</div>
-              </div>
-              <div className="flex flex-wrap gap-2 lg:justify-end">
-                <button
-                  type="button"
-                  onClick={handleExport}
-                  className="inline-flex items-center gap-1.5 rounded-md border border-border bg-card px-3 py-2 text-xs font-medium text-muted-foreground hover:bg-accent hover:text-foreground"
-                >
-                  <Download className="h-3.5 w-3.5" /> Export backup
-                </button>
-                <button
-                  type="button"
-                  onClick={handleImportClick}
-                  className="inline-flex items-center gap-1.5 rounded-md border border-border bg-card px-3 py-2 text-xs font-medium text-muted-foreground hover:bg-accent hover:text-foreground"
-                >
-                  <Upload className="h-3.5 w-3.5" /> Import backup
-                </button>
-                <input ref={fileInputRef} type="file" accept="application/json" className="hidden" onChange={handleImportFile} />
-              </div>
-            </div>
-          </div>
-        </Section>
+        <DataManagement
+          history={history}
+          onExport={handleExport}
+          onImportClick={handleImportClick}
+          fileInputRef={fileInputRef}
+          onImportFile={handleImportFile}
+        />
 
         <Section title="Cash Flow" subtitle="What comes in and what goes out each month.">
           <Field label="Monthly Income" value={profile.monthlyIncome} onChange={(v) => update("monthlyIncome", v)} prefix="₹" />
@@ -196,7 +185,7 @@ function SettingsPage() {
         <Section title="Expenses Breakdown" subtitle="Optional: Split expenses into needs vs wants for smarter 50-30-20 advice.">
           <Field label="Monthly Needs" value={profile.monthlyNeeds || 0} onChange={(v) => update("monthlyNeeds", v)} prefix="₹" />
           <Field label="Monthly Wants" value={profile.monthlyWants || 0} onChange={(v) => update("monthlyWants", v)} prefix="₹" />
-          <div className="rounded-md border border-border/60 bg-muted/40 p-3 text-xs text-muted-foreground col-span-full">
+          <div className="rounded-md border border-border/60 bg-muted/20 p-3 text-xs text-muted-foreground col-span-full leading-normal">
             <strong>Needs:</strong> Rent, utilities, groceries, insurance. <strong>Wants:</strong> Dining out, subscriptions, entertainment, hobbies.
           </div>
         </Section>
@@ -215,21 +204,21 @@ function SettingsPage() {
         </Section>
 
         <Section title="SIP & Step-Up" subtitle="Recurring investment cadence.">
-          <Field label="Monthly SIP" value={profile.monthlySIP} onChange={(v) => update("monthlySIP", v)} prefix="₹" />
-          <Field label="SIP a Year Ago" value={profile.sipLastYear} onChange={(v) => update("sipLastYear", v)} prefix="₹" />
-          <DateField label="SIP Start Date" value={profile.sipStartDate} onChange={(v) => update("sipStartDate", v)} />
+          <Field label="Monthly SIP" value={profile.monthlyInvestment} onChange={(v) => update("monthlyInvestment", v)} prefix="₹" />
+          <Field label="SIP a Year Ago" value={profile.investmentLastYear} onChange={(v) => update("investmentLastYear", v)} prefix="₹" />
+          <DateField label="SIP Start Date" value={profile.investmentStartDate} onChange={(v) => update("investmentStartDate", v)} />
         </Section>
 
         <Section title="Credit" subtitle="Limits and current usage.">
           <Field label="Credit Limit" value={profile.creditLimit} onChange={(v) => update("creditLimit", v)} prefix="₹" />
           <Field label="Current Credit Usage" value={profile.creditUsage} onChange={(v) => update("creditUsage", v)} prefix="₹" />
-          <Field label="Monthly Loan EMIs" value={profile.loans} onChange={(v) => update("loans", v)} prefix="₹" />
+          <Field label="Monthly Loan EMIs" value={profile.monthlyEMI} onChange={(v) => update("monthlyEMI", v)} prefix="₹" />
         </Section>
 
         <Section title="Systems" subtitle="Discipline structures you've set up.">
           <Toggle
             label="Three Account System"
-            description="Separate Spending, Savings and Investment accounts"
+            description="Separate Spending, Savings and Investment accounts to control automatic money routing"
             checked={profile.threeAccountSystem}
             onChange={(v) => update("threeAccountSystem", v)}
           />
@@ -237,92 +226,4 @@ function SettingsPage() {
       </div>
     </PageShell>
   );
-}
-
-function Section({ title, subtitle, children }: { title: string; subtitle: string; children: React.ReactNode }) {
-  return (
-    <section className="rounded-xl border border-border bg-card p-6">
-      <div className="mb-5 flex flex-col gap-1 border-b border-border/60 pb-4">
-        <h2 className="text-sm font-semibold tracking-tight">{title}</h2>
-        <p className="text-xs text-muted-foreground">{subtitle}</p>
-      </div>
-      <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">{children}</div>
-    </section>
-  );
-}
-
-function Field({
-  label,
-  value,
-  onChange,
-  prefix,
-}: {
-  label: string;
-  value: number;
-  onChange: (v: number) => void;
-  prefix?: string;
-}) {
-  return (
-    <label className="block">
-      <span className="text-[11px] font-medium uppercase tracking-wider text-muted-foreground">{label}</span>
-      <div className="mt-1.5 flex items-center gap-2 rounded-md border border-border bg-background/40 px-3 focus-within:border-foreground/40">
-        {prefix && <span className="text-sm text-muted-foreground">{prefix}</span>}
-        <input
-          type="number"
-          value={value}
-          onChange={(e) => onChange(Number(e.target.value) || 0)}
-          className="w-full bg-transparent py-2.5 text-sm font-medium tabular-nums outline-none"
-        />
-      </div>
-    </label>
-  );
-}
-
-function DateField({ label, value, onChange }: { label: string; value: string; onChange: (v: string) => void }) {
-  return (
-    <label className="block">
-      <span className="text-[11px] font-medium uppercase tracking-wider text-muted-foreground">{label}</span>
-      <input
-        type="date"
-        value={value.slice(0, 10)}
-        onChange={(e) => onChange(e.target.value)}
-        className="mt-1.5 w-full rounded-md border border-border bg-background/40 px-3 py-2.5 text-sm outline-none focus:border-foreground/40"
-      />
-    </label>
-  );
-}
-
-function Toggle({
-  label,
-  description,
-  checked,
-  onChange,
-}: {
-  label: string;
-  description: string;
-  checked: boolean;
-  onChange: (v: boolean) => void;
-}) {
-  return (
-    <div className="flex items-start justify-between gap-4 rounded-md border border-border bg-background/40 p-4 sm:col-span-2 lg:col-span-3">
-      <div>
-        <div className="text-sm font-medium">{label}</div>
-        <div className="mt-0.5 text-xs text-muted-foreground">{description}</div>
-      </div>
-      <button
-        onClick={() => onChange(!checked)}
-        className={`relative h-6 w-11 shrink-0 rounded-full transition-colors ${checked ? "bg-success" : "bg-muted"}`}
-        aria-pressed={checked}
-      >
-        <span
-          className="absolute top-0.5 h-5 w-5 rounded-full bg-background shadow transition-transform"
-          style={{ transform: checked ? "translateX(22px)" : "translateX(2px)" }}
-        />
-      </button>
-    </div>
-  );
-}
-
-function formatCheckInDate(iso: string) {
-  return new Intl.DateTimeFormat("en-IN", { dateStyle: "medium" }).format(new Date(iso));
 }
